@@ -282,7 +282,7 @@
         <div class="controls">
             <div class="control-group">
                 <input type="text" id="studentName" placeholder="塾生の名前">
-                <input type="text" id="discordChannel" placeholder="DiscordチャンネルID">
+                <input type="text" id="webhookUrl" placeholder="Discord Webhook URL">
                 <button onclick="addStudent()">追加</button>
             </div>
             <div class="control-group">
@@ -316,7 +316,7 @@
         const SPREADSHEET_SYNC_URL = 'https://script.google.com/macros/s/AKfycbynYjkdIQYeQTBFIdLyE7PmS-CUPkKtoESGa4i83ruoYRKY_DS_Py7w_AxAoipwwlk/exec';
         const DISCORD_NOTIFY_URL = 'https://script.google.com/macros/s/AKfycbysnwj_xGptFPLLlD5zPcmYlwp2o0YPE3ibdQAHQs_gSFCYzCTlFjAoIjquXAzaI2fT/exec';
 
-        let data = { students: [], dates: [], attendance: {}, discordChannels: {} };
+        let data = { students: [], dates: [], attendance: {}, webhookUrls: {} };
 
         // スプレッドシートに同期
         function syncToSpreadsheet() {
@@ -329,11 +329,11 @@
         }
 
         db.ref('attendance').on('value', (snapshot) => {
-            data = snapshot.val() || { students: [], dates: [], attendance: {}, discordChannels: {} };
+            data = snapshot.val() || { students: [], dates: [], attendance: {}, webhookUrls: {} };
             if (!data.students) data.students = [];
             if (!data.dates) data.dates = [];
             if (!data.attendance) data.attendance = {};
-            if (!data.discordChannels) data.discordChannels = {};
+            if (!data.webhookUrls) data.webhookUrls = {};
             renderTables();
             syncToSpreadsheet();
         });
@@ -430,8 +430,8 @@
                     });
                     // 通知ボタン（最初のテーブルのみ）
                     if (chunkIndex === 0) {
-                        const hasChannel = data.discordChannels[si];
-                        html += `<td><button class="notify-btn" onclick="sendNotify(${si})" ${hasChannel ? '' : 'disabled'} title="${hasChannel ? '通知を送信' : 'チャンネルID未設定'}">${hasChannel ? '通知' : '-'}</button></td>`;
+                        const hasChannel = data.webhookUrls[si];
+                        html += `<td><button class="notify-btn" onclick="sendNotify(${si})" ${hasChannel ? '' : 'disabled'} title="${hasChannel ? '通知を送信' : 'Webhook未設定'}">${hasChannel ? '通知' : '-'}</button></td>`;
                     }
                     html += '</tr>';
                 });
@@ -444,35 +444,35 @@
 
         function addStudent() {
             const nameInput = document.getElementById('studentName');
-            const channelInput = document.getElementById('discordChannel');
+            const webhookInput = document.getElementById('webhookUrl');
             const name = nameInput.value.trim();
-            const channelId = channelInput.value.trim();
+            const webhookUrl = webhookInput.value.trim();
             if (!name) return;
 
             const studentIndex = data.students.length;
             data.students.push(name);
 
-            if (channelId) {
-                data.discordChannels[studentIndex] = channelId;
+            if (webhookUrl) {
+                data.webhookUrls[studentIndex] = webhookUrl;
                 db.ref('attendance').update({
                     students: data.students,
-                    discordChannels: data.discordChannels
+                    webhookUrls: data.webhookUrls
                 });
             } else {
                 db.ref('attendance/students').set(data.students);
             }
 
             nameInput.value = '';
-            channelInput.value = '';
+            webhookInput.value = '';
             showToast(name + ' を追加');
         }
 
         function sendNotify(studentIndex) {
             const studentName = data.students[studentIndex];
-            const channelId = data.discordChannels[studentIndex];
+            const webhookUrl = data.webhookUrls[studentIndex];
 
-            if (!channelId) {
-                showToast('チャンネルIDが設定されていません');
+            if (!webhookUrl) {
+                showToast('Webhook URLが設定されていません');
                 return;
             }
 
@@ -483,7 +483,7 @@
                 mode: 'no-cors',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    channelId: channelId,
+                    webhookUrl: webhookUrl,
                     message: message
                 })
             }).then(() => {
@@ -524,7 +524,7 @@
                 students: data.students,
                 dates: data.dates,
                 attendance: newAttendance,
-                discordChannels: data.discordChannels
+                webhookUrls: data.webhookUrls
             });
             showToast('日付を削除しました');
         }
@@ -555,14 +555,14 @@
                 }
             });
 
-            // discordChannelsも再構築
+            // webhookUrlsも再構築
             const newDiscordChannels = {};
-            Object.keys(data.discordChannels).forEach(key => {
+            Object.keys(data.webhookUrls).forEach(key => {
                 const si = Number(key);
                 if (si < index) {
-                    newDiscordChannels[si] = data.discordChannels[key];
+                    newDiscordChannels[si] = data.webhookUrls[key];
                 } else if (si > index) {
-                    newDiscordChannels[si - 1] = data.discordChannels[key];
+                    newDiscordChannels[si - 1] = data.webhookUrls[key];
                 }
             });
 
@@ -570,7 +570,7 @@
                 students: data.students,
                 dates: data.dates,
                 attendance: newAttendance,
-                discordChannels: newDiscordChannels
+                webhookUrls: newDiscordChannels
             });
             showToast('削除しました');
         }
