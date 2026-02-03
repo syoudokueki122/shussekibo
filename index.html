@@ -250,6 +250,31 @@
             background: #f9a825;
         }
 
+        .timer-btn {
+            padding: 6px 10px;
+            background: #34a853;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            font-size: 12px;
+            font-weight: 600;
+            cursor: pointer;
+            margin-left: 4px;
+        }
+
+        .timer-btn:hover {
+            background: #2d8a47;
+        }
+
+        .timer-btn:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+
+        .timer-btn.scheduled {
+            background: #ff9800;
+        }
+
         th:last-child, td:last-child {
             background: #f8f9fa;
         }
@@ -333,6 +358,7 @@
         const DISCORD_NOTIFY_URL = 'https://script.google.com/macros/s/AKfycbysnwj_xGptFPLLlD5zPcmYlwp2o0YPE3ibdQAHQs_gSFCYzCTlFjAoIjquXAzaI2fT/exec';
 
         let data = { students: [], dates: [], attendance: {}, webhookUrls: {}, discordUserIds: {} };
+        let scheduledTimers = {}; // 予約済みタイマーを管理
 
         // スプレッドシートに同期
         function syncToSpreadsheet() {
@@ -445,10 +471,11 @@
                         html += `<td class="attendance-cell ${cellClass}"
                              onclick="toggle(${si}, ${di})">${cellText}</td>`;
                     });
-                    // 通知ボタン＆編集ボタン（最初のテーブルのみ）
+                    // 通知ボタン＆編集ボタン＆タイマーボタン（最初のテーブルのみ）
                     if (chunkIndex === 0) {
                         const hasWebhook = data.webhookUrls[si];
-                        html += `<td><button class="notify-btn" onclick="sendNotify(${si})" ${hasWebhook ? '' : 'disabled'} title="${hasWebhook ? '通知を送信' : 'Webhook未設定'}">${hasWebhook ? '通知' : '-'}</button><button class="edit-btn" onclick="editStudent(${si})" title="設定を編集">編集</button></td>`;
+                        const isScheduled = scheduledTimers[si];
+                        html += `<td><button class="notify-btn" onclick="sendNotify(${si})" ${hasWebhook ? '' : 'disabled'} title="${hasWebhook ? '通知を送信' : 'Webhook未設定'}">${hasWebhook ? '通知' : '-'}</button><button class="edit-btn" onclick="editStudent(${si})" title="設定を編集">編集</button><button class="timer-btn ${isScheduled ? 'scheduled' : ''}" onclick="scheduleNotify(${si})" ${hasWebhook ? '' : 'disabled'} title="${isScheduled ? '予約中（クリックでキャンセル）' : '10分後に通知'}">${isScheduled ? '予約中' : '10分後'}</button></td>`;
                     }
                     html += '</tr>';
                 });
@@ -515,6 +542,29 @@
                 console.log('Notify error:', err);
                 showToast('通知の送信に失敗しました');
             });
+        }
+
+        function scheduleNotify(studentIndex) {
+            const studentName = data.students[studentIndex];
+
+            // 既に予約されている場合はキャンセル
+            if (scheduledTimers[studentIndex]) {
+                clearTimeout(scheduledTimers[studentIndex]);
+                delete scheduledTimers[studentIndex];
+                showToast(studentName + ' の予約をキャンセルしました');
+                renderTables();
+                return;
+            }
+
+            // 10分後に通知を予約
+            scheduledTimers[studentIndex] = setTimeout(() => {
+                sendNotify(studentIndex);
+                delete scheduledTimers[studentIndex];
+                renderTables();
+            }, 10 * 60 * 1000); // 10分 = 600000ms
+
+            showToast(studentName + ' に10分後に通知します');
+            renderTables();
         }
 
         function editStudent(studentIndex) {
