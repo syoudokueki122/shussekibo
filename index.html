@@ -1,0 +1,584 @@
+<!DOCTYPE html>
+<html lang="ja">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>出席簿</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Hiragino Sans', sans-serif;
+        }
+
+        body {
+            margin: 0;
+            padding: 15px;
+            background: #f0f2f5;
+            min-height: 100vh;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        h1 {
+            color: #333;
+            font-size: 24px;
+            margin: 0 0 15px 0;
+        }
+
+        .controls {
+            background: white;
+            padding: 15px;
+            border-radius: 12px;
+            margin-bottom: 15px;
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+        }
+
+        .control-group {
+            display: flex;
+            gap: 8px;
+            flex: 1;
+            min-width: 200px;
+        }
+
+        input[type="text"] {
+            flex: 1;
+            padding: 12px 15px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 16px;
+        }
+
+        input[type="text"]:focus {
+            border-color: #4285f4;
+            outline: none;
+        }
+
+        button {
+            padding: 12px 20px;
+            background: #4285f4;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 15px;
+            font-weight: 600;
+            cursor: pointer;
+            white-space: nowrap;
+        }
+
+        button:hover {
+            background: #3367d6;
+        }
+
+        button.secondary {
+            background: #5f6368;
+        }
+
+        button.secondary:hover {
+            background: #4a4e51;
+        }
+
+        .table-container {
+            background: white;
+            border-radius: 12px;
+            overflow-x: auto;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+            margin-bottom: 15px;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            min-width: 300px;
+        }
+
+        th,
+        td {
+            padding: 14px 12px;
+            text-align: center;
+            border-bottom: 1px solid #eee;
+        }
+
+        th {
+            background: #4285f4;
+            color: white;
+            font-weight: 600;
+            position: sticky;
+            top: 0;
+        }
+
+        th:first-child {
+            text-align: left;
+            background: #3367d6;
+        }
+
+        td:first-child {
+            text-align: left;
+            font-weight: 600;
+            background: #fafafa;
+        }
+
+        tr:hover td {
+            background: #f5f8ff;
+        }
+
+        tr:hover td:first-child {
+            background: #eef3fc;
+        }
+
+        .attendance-cell {
+            cursor: pointer;
+            font-size: 28px;
+            user-select: none;
+        }
+
+        .attendance-cell:hover {
+            transform: scale(1.2);
+        }
+
+        .present {
+            color: #34a853;
+        }
+
+        .absent {
+            color: #ea4335;
+        }
+
+        .empty {
+            color: #dadce0;
+        }
+
+        .date-header {
+            position: relative;
+            padding-right: 20px;
+        }
+
+        .name-cell {
+            position: relative;
+            padding-left: 25px;
+        }
+
+        .name-delete {
+            position: absolute;
+            top: -5px;
+            left: -5px;
+            background: #ea4335;
+            color: white;
+            border: none;
+            border-radius: 50%;
+            width: 20px;
+            height: 20px;
+            font-size: 14px;
+            line-height: 18px;
+            cursor: pointer;
+            opacity: 0.7;
+            padding: 0;
+        }
+
+        .name-delete:hover {
+            opacity: 1;
+            background: #c62828;
+        }
+
+        .date-delete {
+            position: absolute;
+            top: -5px;
+            right: -5px;
+            background: #ea4335;
+            color: white;
+            border: none;
+            border-radius: 50%;
+            width: 20px;
+            height: 20px;
+            font-size: 14px;
+            line-height: 18px;
+            cursor: pointer;
+            opacity: 0.7;
+            padding: 0;
+        }
+
+        .date-delete:hover {
+            opacity: 1;
+            background: #c62828;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 60px 20px;
+            color: #666;
+        }
+
+        .notify-btn {
+            padding: 6px 12px;
+            background: #7289da;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            font-size: 12px;
+            font-weight: 600;
+            cursor: pointer;
+        }
+
+        .notify-btn:hover {
+            background: #5b6eae;
+        }
+
+        .notify-btn:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+
+        th:last-child, td:last-child {
+            background: #f8f9fa;
+        }
+
+        th:last-child {
+            background: #5f6368;
+        }
+
+        .toast {
+            position: fixed;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: #323232;
+            color: white;
+            padding: 12px 24px;
+            border-radius: 8px;
+            display: none;
+            z-index: 1000;
+        }
+
+        .week-label {
+            background: #e8f0fe;
+            color: #1967d2;
+            font-weight: 600;
+            text-align: center;
+            padding: 8px;
+        }
+
+        @media (max-width: 600px) {
+            .control-group {
+                min-width: 100%;
+            }
+
+            .attendance-cell {
+                font-size: 24px;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <h1>出席簿</h1>
+
+        <div class="controls">
+            <div class="control-group">
+                <input type="text" id="studentName" placeholder="塾生の名前">
+                <input type="text" id="discordChannel" placeholder="DiscordチャンネルID">
+                <button onclick="addStudent()">追加</button>
+            </div>
+            <div class="control-group">
+                <button onclick="addDate()" class="secondary">今日の日付を追加</button>
+            </div>
+        </div>
+
+        <div id="tablesContainer"></div>
+    </div>
+
+    <div id="toast" class="toast"></div>
+
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
+
+    <script>
+        const firebaseConfig = {
+            apiKey: "AIzaSyCi9wpCbUDK527GwdEf1xUasjtMLHa6ZaI",
+            authDomain: "ifjuku-syusseki.firebaseapp.com",
+            databaseURL: "https://ifjuku-syusseki-default-rtdb.asia-southeast1.firebasedatabase.app",
+            projectId: "ifjuku-syusseki",
+            storageBucket: "ifjuku-syusseki.firebasestorage.app",
+            messagingSenderId: "866115058545",
+            appId: "1:866115058545:web:26b0a7c1cd9bcc7d3e94d0",
+            measurementId: "G-4HJSP2V85Z"
+        };
+
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.database();
+
+        const SPREADSHEET_SYNC_URL = 'https://script.google.com/macros/s/AKfycbynYjkdIQYeQTBFIdLyE7PmS-CUPkKtoESGa4i83ruoYRKY_DS_Py7w_AxAoipwwlk/exec';
+        const DISCORD_NOTIFY_URL = 'https://script.google.com/macros/s/AKfycbysnwj_xGptFPLLlD5zPcmYlwp2o0YPE3ibdQAHQs_gSFCYzCTlFjAoIjquXAzaI2fT/exec';
+
+        let data = { students: [], dates: [], attendance: {}, discordChannels: {} };
+
+        // スプレッドシートに同期
+        function syncToSpreadsheet() {
+            fetch(SPREADSHEET_SYNC_URL, {
+                method: 'POST',
+                mode: 'no-cors',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data)
+            }).catch(err => console.log('Sync error:', err));
+        }
+
+        db.ref('attendance').on('value', (snapshot) => {
+            data = snapshot.val() || { students: [], dates: [], attendance: {}, discordChannels: {} };
+            if (!data.students) data.students = [];
+            if (!data.dates) data.dates = [];
+            if (!data.attendance) data.attendance = {};
+            if (!data.discordChannels) data.discordChannels = {};
+            renderTables();
+            syncToSpreadsheet();
+        });
+
+        function showToast(msg) {
+            const t = document.getElementById('toast');
+            t.textContent = msg;
+            t.style.display = 'block';
+            setTimeout(() => t.style.display = 'none', 2000);
+        }
+
+        function getMonth(dateStr) {
+            // "2/2" -> "2", "12/25" -> "12"
+            return dateStr.split('/')[0];
+        }
+
+        function renderTables() {
+            const container = document.getElementById('tablesContainer');
+
+            if (data.students.length === 0) {
+                container.innerHTML = '<div class="table-container"><div class="empty-state"><p><strong>まだ塾生がいません</strong></p><p>上から追加してください</p></div></div>';
+                return;
+            }
+
+            // 日付を月ごとに分割
+            const dateChunks = [];
+            let currentChunk = null;
+            let currentMonth = null;
+
+            data.dates.forEach((date, index) => {
+                const month = getMonth(date);
+                if (month !== currentMonth) {
+                    currentChunk = { dates: [], startIndex: index, month: month };
+                    dateChunks.push(currentChunk);
+                    currentMonth = month;
+                }
+                currentChunk.dates.push(date);
+            });
+
+            // 日付がない場合は空のチャンクを追加
+            if (dateChunks.length === 0) {
+                dateChunks.push({ dates: [], startIndex: 0, month: '' });
+            }
+
+            let html = '';
+
+            dateChunks.forEach((chunk, chunkIndex) => {
+                html += `<div class="table-container">`;
+
+                if (dateChunks.length > 1 || chunk.month) {
+                    html += `<div class="week-label">${chunk.month}月</div>`;
+                }
+
+                html += '<table><thead><tr><th>名前</th>';
+
+                // 日付ヘッダー（削除ボタン付き）
+                chunk.dates.forEach((d, i) => {
+                    const actualIndex = chunk.startIndex + i;
+                    html += `<th><div class="date-header">${d}<button class="date-delete" onclick="deleteDate(${actualIndex})" title="日付を削除">×</button></div></th>`;
+                });
+
+                // 通知列（最初のテーブルのみ）
+                if (chunkIndex === 0) {
+                    html += '<th>通知</th>';
+                }
+
+                html += '</tr></thead><tbody>';
+
+                // 学生データ
+                data.students.forEach((student, si) => {
+                    // 名前セル（削除ボタン付きは最初のテーブルのみ）
+                    if (chunkIndex === 0) {
+                        html += `<tr><td><div class="name-cell">${student}<button class="name-delete" onclick="deleteStudent(${si})" title="削除">×</button></div></td>`;
+                    } else {
+                        html += `<tr><td>${student}</td>`;
+                    }
+                    chunk.dates.forEach((date, i) => {
+                        const di = chunk.startIndex + i;
+                        const key = `${si}_${di}`;
+                        const status = data.attendance[key];
+                        let cellClass, cellText;
+                        if (status === 'present') {
+                            cellClass = 'present';
+                            cellText = '○';
+                        } else if (status === 'absent') {
+                            cellClass = 'absent';
+                            cellText = '×';
+                        } else {
+                            cellClass = 'empty';
+                            cellText = '・';
+                        }
+                        html += `<td class="attendance-cell ${cellClass}"
+                             onclick="toggle(${si}, ${di})">${cellText}</td>`;
+                    });
+                    // 通知ボタン（最初のテーブルのみ）
+                    if (chunkIndex === 0) {
+                        const hasChannel = data.discordChannels[si];
+                        html += `<td><button class="notify-btn" onclick="sendNotify(${si})" ${hasChannel ? '' : 'disabled'} title="${hasChannel ? '通知を送信' : 'チャンネルID未設定'}">${hasChannel ? '通知' : '-'}</button></td>`;
+                    }
+                    html += '</tr>';
+                });
+
+                html += '</tbody></table></div>';
+            });
+
+            container.innerHTML = html;
+        }
+
+        function addStudent() {
+            const nameInput = document.getElementById('studentName');
+            const channelInput = document.getElementById('discordChannel');
+            const name = nameInput.value.trim();
+            const channelId = channelInput.value.trim();
+            if (!name) return;
+
+            const studentIndex = data.students.length;
+            data.students.push(name);
+
+            if (channelId) {
+                data.discordChannels[studentIndex] = channelId;
+                db.ref('attendance').update({
+                    students: data.students,
+                    discordChannels: data.discordChannels
+                });
+            } else {
+                db.ref('attendance/students').set(data.students);
+            }
+
+            nameInput.value = '';
+            channelInput.value = '';
+            showToast(name + ' を追加');
+        }
+
+        function sendNotify(studentIndex) {
+            const studentName = data.students[studentIndex];
+            const channelId = data.discordChannels[studentIndex];
+
+            if (!channelId) {
+                showToast('チャンネルIDが設定されていません');
+                return;
+            }
+
+            const message = `【出席確認】\n${studentName}さん、本日の授業に出席されていません。ご確認ください。`;
+
+            fetch(DISCORD_NOTIFY_URL, {
+                method: 'POST',
+                mode: 'no-cors',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    channelId: channelId,
+                    message: message
+                })
+            }).then(() => {
+                showToast(studentName + ' に通知を送信しました');
+            }).catch(err => {
+                console.log('Notify error:', err);
+                showToast('通知の送信に失敗しました');
+            });
+        }
+
+        function addDate() {
+            const today = new Date();
+            const days = ['日', '月', '火', '水', '木', '金', '土'];
+            const hours = String(today.getHours()).padStart(2, '0');
+            const minutes = String(today.getMinutes()).padStart(2, '0');
+            const dateStr = (today.getMonth() + 1) + '/' + today.getDate() + '(' + days[today.getDay()] + ') ' + hours + ':' + minutes;
+
+            data.dates.push(dateStr);
+            db.ref('attendance/dates').set(data.dates);
+            showToast(dateStr + ' を追加');
+        }
+
+        function deleteDate(index) {
+            data.dates.splice(index, 1);
+
+            // 出席データを再構築
+            const newAttendance = {};
+            Object.keys(data.attendance).forEach(key => {
+                const [si, di] = key.split('_').map(Number);
+                if (di < index) {
+                    newAttendance[key] = data.attendance[key];
+                } else if (di > index) {
+                    newAttendance[`${si}_${di - 1}`] = data.attendance[key];
+                }
+            });
+
+            db.ref('attendance').set({
+                students: data.students,
+                dates: data.dates,
+                attendance: newAttendance,
+                discordChannels: data.discordChannels
+            });
+            showToast('日付を削除しました');
+        }
+
+        function toggle(studentIndex, dateIndex) {
+            const key = `${studentIndex}_${dateIndex}`;
+            const current = data.attendance[key];
+            let next;
+            if (!current || current === '') {
+                next = 'present';  // 空白 → ◯
+            } else if (current === 'present') {
+                next = 'absent';   // ◯ → ×
+            } else {
+                next = null;       // × → 空白
+            }
+            db.ref(`attendance/attendance/${key}`).set(next);
+        }
+
+        function deleteStudent(index) {
+            data.students.splice(index, 1);
+            const newAttendance = {};
+            Object.keys(data.attendance).forEach(key => {
+                const [si, di] = key.split('_').map(Number);
+                if (si < index) {
+                    newAttendance[key] = data.attendance[key];
+                } else if (si > index) {
+                    newAttendance[`${si - 1}_${di}`] = data.attendance[key];
+                }
+            });
+
+            // discordChannelsも再構築
+            const newDiscordChannels = {};
+            Object.keys(data.discordChannels).forEach(key => {
+                const si = Number(key);
+                if (si < index) {
+                    newDiscordChannels[si] = data.discordChannels[key];
+                } else if (si > index) {
+                    newDiscordChannels[si - 1] = data.discordChannels[key];
+                }
+            });
+
+            db.ref('attendance').set({
+                students: data.students,
+                dates: data.dates,
+                attendance: newAttendance,
+                discordChannels: newDiscordChannels
+            });
+            showToast('削除しました');
+        }
+
+        document.getElementById('studentName').addEventListener('keypress', e => {
+            if (e.key === 'Enter') addStudent();
+        });
+    </script>
+</body>
+
+</html>
