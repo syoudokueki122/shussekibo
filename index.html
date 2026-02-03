@@ -250,29 +250,8 @@
             background: #f9a825;
         }
 
-        .timer-btn {
-            padding: 6px 10px;
-            background: #34a853;
-            color: white;
-            border: none;
-            border-radius: 6px;
-            font-size: 12px;
-            font-weight: 600;
-            cursor: pointer;
-            margin-left: 4px;
-        }
-
-        .timer-btn:hover {
-            background: #2d8a47;
-        }
-
-        .timer-btn:disabled {
-            background: #ccc;
-            cursor: not-allowed;
-        }
-
-        .timer-btn.scheduled {
-            background: #ff9800;
+        .warning {
+            color: #fbbc04;
         }
 
         th:last-child, td:last-child {
@@ -358,7 +337,8 @@
         const DISCORD_NOTIFY_URL = 'https://script.google.com/macros/s/AKfycbysnwj_xGptFPLLlD5zPcmYlwp2o0YPE3ibdQAHQs_gSFCYzCTlFjAoIjquXAzaI2fT/exec';
 
         let data = { students: [], dates: [], attendance: {}, webhookUrls: {}, discordUserIds: {} };
-        let scheduledTimers = {}; // 予約済みタイマーを管理
+        let triangleTimers = {}; // △の10秒タイマー
+        let notifyTimers = {}; // 5分後通知タイマー
 
         // スプレッドシートに同期
         function syncToSpreadsheet() {
@@ -461,6 +441,9 @@
                         if (status === 'present') {
                             cellClass = 'present';
                             cellText = '○';
+                        } else if (status === 'warning') {
+                            cellClass = 'warning';
+                            cellText = '△';
                         } else if (status === 'absent') {
                             cellClass = 'absent';
                             cellText = '×';
@@ -471,11 +454,10 @@
                         html += `<td class="attendance-cell ${cellClass}"
                              onclick="toggle(${si}, ${di})">${cellText}</td>`;
                     });
-                    // 通知ボタン＆編集ボタン＆タイマーボタン（最初のテーブルのみ）
+                    // 通知ボタン＆編集ボタン（最初のテーブルのみ）
                     if (chunkIndex === 0) {
                         const hasWebhook = data.webhookUrls[si];
-                        const isScheduled = scheduledTimers[si];
-                        html += `<td><button class="notify-btn" onclick="sendNotify(${si})" ${hasWebhook ? '' : 'disabled'} title="${hasWebhook ? '通知を送信' : 'Webhook未設定'}">${hasWebhook ? '通知' : '-'}</button><button class="edit-btn" onclick="editStudent(${si})" title="設定を編集">編集</button><button class="timer-btn ${isScheduled ? 'scheduled' : ''}" onclick="scheduleNotify(${si})" ${hasWebhook ? '' : 'disabled'} title="${isScheduled ? '予約中（クリックでキャンセル）' : '10分後に通知'}">${isScheduled ? '予約中' : '10分後'}</button></td>`;
+                        html += `<td><button class="notify-btn" onclick="sendNotify(${si})" ${hasWebhook ? '' : 'disabled'} title="${hasWebhook ? '通知を送信' : 'Webhook未設定'}">${hasWebhook ? '通知' : '-'}</button><button class="edit-btn" onclick="editStudent(${si})" title="設定を編集">編集</button></td>`;
                     }
                     html += '</tr>';
                 });
@@ -542,29 +524,6 @@
                 console.log('Notify error:', err);
                 showToast('通知の送信に失敗しました');
             });
-        }
-
-        function scheduleNotify(studentIndex) {
-            const studentName = data.students[studentIndex];
-
-            // 既に予約されている場合はキャンセル
-            if (scheduledTimers[studentIndex]) {
-                clearTimeout(scheduledTimers[studentIndex]);
-                delete scheduledTimers[studentIndex];
-                showToast(studentName + ' の予約をキャンセルしました');
-                renderTables();
-                return;
-            }
-
-            // 10分後に通知を予約
-            scheduledTimers[studentIndex] = setTimeout(() => {
-                sendNotify(studentIndex);
-                delete scheduledTimers[studentIndex];
-                renderTables();
-            }, 10 * 60 * 1000); // 10分 = 600000ms
-
-            showToast(studentName + ' に10分後に通知します');
-            renderTables();
         }
 
         function editStudent(studentIndex) {
@@ -638,12 +597,40 @@
             const current = data.attendance[key];
             let next;
             if (!current || current === '') {
-                next = 'present';  // 空白 → ◯
+                next = 'present';  // 空白 → ○
             } else if (current === 'present') {
-                next = 'absent';   // ◯ → ×
+                next = 'warning';  // ○ → △
+            } else if (current === 'warning') {
+                next = 'absent';   // △ → ×
             } else {
                 next = null;       // × → 空白
             }
+
+            // 既存のタイマーをキャンセル
+            if (triangleTimers[key]) {
+                clearTimeout(triangleTimers[key]);
+                delete triangleTimers[key];
+            }
+            if (notifyTimers[key]) {
+                clearTimeout(notifyTimers[key]);
+                delete notifyTimers[key];
+            }
+
+            // △になったら10秒後に5分タイマーを設定
+            if (next === 'warning') {
+                triangleTimers[key] = setTimeout(() => {
+                    // 10秒経過、5分後に通知を予約
+                    delete triangleTimers[key];
+                    const studentName = data.students[studentIndex];
+                    showToast(studentName + ' に5分後に通知します');
+
+                    notifyTimers[key] = setTimeout(() => {
+                        sendNotify(studentIndex);
+                        delete notifyTimers[key];
+                    }, 5 * 60 * 1000); // 5分
+                }, 10 * 1000); // 10秒
+            }
+
             db.ref(`attendance/attendance/${key}`).set(next);
         }
 
