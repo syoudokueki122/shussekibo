@@ -544,6 +544,7 @@
         }
 
         function deleteStudent(index) {
+            if (!confirm(`「${data.students[index]}」を削除しますか？`)) return;
             data.students.splice(index, 1);
             const newAttendance = {};
             Object.keys(data.attendance).forEach(key => {
