@@ -275,12 +275,36 @@
             z-index: 1000;
         }
 
-        .week-label {
+        .month-tabs {
+            display: flex;
+            gap: 6px;
+            padding: 10px 15px;
+            background: white;
+            border-radius: 12px;
+            margin-bottom: 15px;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+            overflow-x: auto;
+        }
+
+        .month-tab {
+            padding: 8px 20px;
             background: #e8f0fe;
             color: #1967d2;
+            border: none;
+            border-radius: 8px;
+            font-size: 15px;
             font-weight: 600;
-            text-align: center;
-            padding: 8px;
+            cursor: pointer;
+            white-space: nowrap;
+        }
+
+        .month-tab:hover {
+            background: #d2e3fc;
+        }
+
+        .month-tab.active {
+            background: #4285f4;
+            color: white;
         }
 
         @media (max-width: 600px) {
@@ -309,6 +333,8 @@
                 <button onclick="addDate()" class="secondary">今日の日付を追加</button>
             </div>
         </div>
+
+        <div id="monthTabs" class="month-tabs" style="display:none;"></div>
 
         <div id="tablesContainer"></div>
     </div>
@@ -341,6 +367,7 @@
         const DISCORD_NOTIFY_URL = 'https://script.google.com/macros/s/AKfycbysnwj_xGptFPLLlD5zPcmYlwp2o0YPE3ibdQAHQs_gSFCYzCTlFjAoIjquXAzaI2fT/exec';
 
         let data = { students: [], dates: [], attendance: {}, webhookUrls: {}, discordUserIds: {} };
+        let selectedMonth = null;
         let triangleTimers = {}; // △の10秒タイマー
         let notifyTimers = {}; // 5分後通知タイマー
         let notifiedKeys = {}; // 通知済みのキー（重複防止）
@@ -378,98 +405,102 @@
             return dateStr.split('/')[0];
         }
 
+        function getDateChunks() {
+            const dateChunks = [];
+            let currentChunk = null;
+            let curMonth = null;
+            data.dates.forEach((date, index) => {
+                const month = getMonth(date);
+                if (month !== curMonth) {
+                    currentChunk = { dates: [], startIndex: index, month: month };
+                    dateChunks.push(currentChunk);
+                    curMonth = month;
+                }
+                currentChunk.dates.push(date);
+            });
+            return dateChunks;
+        }
+
+        function switchMonth(month) {
+            selectedMonth = month;
+            renderTables();
+        }
+
         function renderTables() {
             const container = document.getElementById('tablesContainer');
+            const tabsContainer = document.getElementById('monthTabs');
 
             if (data.students.length === 0) {
+                tabsContainer.style.display = 'none';
                 container.innerHTML = '<div class="table-container"><div class="empty-state"><p><strong>まだ塾生がいません</strong></p><p>上から追加してください</p></div></div>';
                 return;
             }
 
-            // 日付を月ごとに分割
-            const dateChunks = [];
-            let currentChunk = null;
-            let currentMonth = null;
+            const dateChunks = getDateChunks();
 
-            data.dates.forEach((date, index) => {
-                const month = getMonth(date);
-                if (month !== currentMonth) {
-                    currentChunk = { dates: [], startIndex: index, month: month };
-                    dateChunks.push(currentChunk);
-                    currentMonth = month;
-                }
-                currentChunk.dates.push(date);
-            });
-
-            // 日付がない場合は空のチャンクを追加
-            if (dateChunks.length === 0) {
-                dateChunks.push({ dates: [], startIndex: 0, month: '' });
+            if (dateChunks.length <= 1) {
+                tabsContainer.style.display = 'none';
+            } else {
+                tabsContainer.style.display = 'flex';
             }
 
-            let html = '';
+            const months = dateChunks.map(c => c.month);
+            if (!selectedMonth || !months.includes(selectedMonth)) {
+                selectedMonth = months.length > 0 ? months[months.length - 1] : null;
+            }
 
-            dateChunks.forEach((chunk, chunkIndex) => {
-                html += `<div class="table-container">`;
+            // タブ描画
+            let tabsHtml = '';
+            dateChunks.forEach(chunk => {
+                const isActive = chunk.month === selectedMonth ? ' active' : '';
+                tabsHtml += `<button class="month-tab${isActive}" onclick="switchMonth('${chunk.month}')">${chunk.month}月</button>`;
+            });
+            tabsContainer.innerHTML = tabsHtml;
 
-                if (dateChunks.length > 1 || chunk.month) {
-                    html += `<div class="week-label">${chunk.month}月</div>`;
-                }
+            // 選択中の月のチャンクを取得
+            const chunk = dateChunks.find(c => c.month === selectedMonth) || { dates: [], startIndex: 0, month: '' };
 
-                html += '<table><thead><tr><th>名前</th>';
+            let html = '<div class="table-container">';
+            html += '<table><thead><tr><th>名前</th>';
 
-                // 日付ヘッダー（削除ボタン付き）
-                chunk.dates.forEach((d, i) => {
-                    const actualIndex = chunk.startIndex + i;
-                    html += `<th><div class="date-header">${d}<button class="date-delete" onclick="deleteDate(${actualIndex})" title="日付を削除">×</button></div></th>`;
-                });
-
-                // 通知列（最初のテーブルのみ）
-                if (chunkIndex === 0) {
-                    html += '<th>通知</th>';
-                }
-
-                html += '</tr></thead><tbody>';
-
-                // 学生データ
-                data.students.forEach((student, si) => {
-                    // 名前セル（削除ボタン付きは最初のテーブルのみ）
-                    if (chunkIndex === 0) {
-                        html += `<tr><td><div class="name-cell">${student}<button class="name-delete" onclick="deleteStudent(${si})" title="削除">×</button></div></td>`;
-                    } else {
-                        html += `<tr><td>${student}</td>`;
-                    }
-                    chunk.dates.forEach((date, i) => {
-                        const di = chunk.startIndex + i;
-                        const key = `${si}_${di}`;
-                        const status = data.attendance[key];
-                        let cellClass, cellText;
-                        if (status === 'present') {
-                            cellClass = 'present';
-                            cellText = '○';
-                        } else if (status === 'warning') {
-                            cellClass = 'warning';
-                            cellText = '△';
-                        } else if (status === 'absent') {
-                            cellClass = 'absent';
-                            cellText = '×';
-                        } else {
-                            cellClass = 'empty';
-                            cellText = '・';
-                        }
-                        html += `<td class="attendance-cell ${cellClass}"
-                             onclick="toggle(${si}, ${di})">${cellText}</td>`;
-                    });
-                    // 通知ボタン＆編集ボタン（最初のテーブルのみ）
-                    if (chunkIndex === 0) {
-                        const hasWebhook = data.webhookUrls[si];
-                        html += `<td><button class="notify-btn" onclick="sendNotify(${si})" ${hasWebhook ? '' : 'disabled'} title="${hasWebhook ? '通知を送信' : 'Webhook未設定'}">${hasWebhook ? '通知' : '-'}</button><button class="edit-btn" onclick="editStudent(${si})" title="設定を編集">編集</button></td>`;
-                    }
-                    html += '</tr>';
-                });
-
-                html += '</tbody></table></div>';
+            chunk.dates.forEach((d, i) => {
+                const actualIndex = chunk.startIndex + i;
+                html += `<th><div class="date-header">${d}<button class="date-delete" onclick="deleteDate(${actualIndex})" title="日付を削除">×</button></div></th>`;
             });
 
+            html += '<th>通知</th>';
+            html += '</tr></thead><tbody>';
+
+            data.students.forEach((student, si) => {
+                html += `<tr><td><div class="name-cell">${student}<button class="name-delete" onclick="deleteStudent(${si})" title="削除">×</button></div></td>`;
+
+                chunk.dates.forEach((date, i) => {
+                    const di = chunk.startIndex + i;
+                    const key = `${si}_${di}`;
+                    const status = data.attendance[key];
+                    let cellClass, cellText;
+                    if (status === 'present') {
+                        cellClass = 'present';
+                        cellText = '○';
+                    } else if (status === 'warning') {
+                        cellClass = 'warning';
+                        cellText = '△';
+                    } else if (status === 'absent') {
+                        cellClass = 'absent';
+                        cellText = '×';
+                    } else {
+                        cellClass = 'empty';
+                        cellText = '・';
+                    }
+                    html += `<td class="attendance-cell ${cellClass}" onclick="toggle(${si}, ${di})">${cellText}</td>`;
+                });
+
+                const hasWebhook = data.webhookUrls[si];
+                html += `<td><button class="notify-btn" onclick="sendNotify(${si})" ${hasWebhook ? '' : 'disabled'} title="${hasWebhook ? '通知を送信' : 'Webhook未設定'}">${hasWebhook ? '通知' : '-'}</button><button class="edit-btn" onclick="editStudent(${si})" title="設定を編集">編集</button></td>`;
+                html += '</tr>';
+            });
+
+            html += '</tbody></table></div>';
             container.innerHTML = html;
         }
 
@@ -569,6 +600,7 @@
             const dateStr = (today.getMonth() + 1) + '/' + today.getDate() + '(' + days[today.getDay()] + ') ' + hours + ':' + minutes;
 
             data.dates.push(dateStr);
+            selectedMonth = String(today.getMonth() + 1);
             db.ref('attendance/dates').set(data.dates);
             showToast(dateStr + ' を追加');
         }
