@@ -234,22 +234,6 @@
             cursor: not-allowed;
         }
 
-        .edit-btn {
-            padding: 6px 10px;
-            background: #fbbc04;
-            color: #333;
-            border: none;
-            border-radius: 6px;
-            font-size: 12px;
-            font-weight: 600;
-            cursor: pointer;
-            margin-left: 4px;
-        }
-
-        .edit-btn:hover {
-            background: #f9a825;
-        }
-
         .warning {
             color: #fbbc04;
         }
@@ -326,12 +310,19 @@
         <div class="controls">
             <div class="control-group">
                 <input type="text" id="studentName" placeholder="塾生の名前">
-                <input type="text" id="webhookUrl" placeholder="Discord Webhook URL">
                 <button onclick="addStudent()">追加</button>
             </div>
             <div class="control-group">
                 <button onclick="addDate()" class="secondary">今日の日付を追加</button>
             </div>
+        </div>
+
+        <div class="controls" style="align-items: center;">
+            <div class="control-group">
+                <input type="text" id="globalWebhookUrl" placeholder="Discord Webhook URL">
+                <button onclick="saveWebhook()" style="background:#7289da;">Webhook保存</button>
+            </div>
+            <span id="webhookStatus" style="font-size:13px; color:#888;"></span>
         </div>
 
         <div id="monthTabs" class="month-tabs" style="display:none;"></div>
@@ -366,7 +357,7 @@
         const SPREADSHEET_SYNC_URL = 'https://script.google.com/macros/s/AKfycbynYjkdIQYeQTBFIdLyE7PmS-CUPkKtoESGa4i83ruoYRKY_DS_Py7w_AxAoipwwlk/exec';
         const DISCORD_NOTIFY_URL = 'https://script.google.com/macros/s/AKfycbysnwj_xGptFPLLlD5zPcmYlwp2o0YPE3ibdQAHQs_gSFCYzCTlFjAoIjquXAzaI2fT/exec';
 
-        let data = { students: [], dates: [], attendance: {}, webhookUrls: {}, discordUserIds: {} };
+        let data = { students: [], dates: [], attendance: {}, globalWebhookUrl: '' };
         let selectedMonth = null;
         let triangleTimers = {}; // △の10秒タイマー
         let notifyTimers = {}; // 5分後通知タイマー
@@ -383,12 +374,18 @@
         }
 
         db.ref('attendance').on('value', (snapshot) => {
-            data = snapshot.val() || { students: [], dates: [], attendance: {}, webhookUrls: {}, discordUserIds: {} };
+            data = snapshot.val() || { students: [], dates: [], attendance: {}, globalWebhookUrl: '' };
             if (!data.students) data.students = [];
             if (!data.dates) data.dates = [];
             if (!data.attendance) data.attendance = {};
-            if (!data.webhookUrls) data.webhookUrls = {};
-            if (!data.discordUserIds) data.discordUserIds = {};
+            if (!data.globalWebhookUrl) data.globalWebhookUrl = '';
+            // Webhook URL欄に反映
+            const webhookInput = document.getElementById('globalWebhookUrl');
+            if (webhookInput && data.globalWebhookUrl) {
+                webhookInput.value = data.globalWebhookUrl;
+                document.getElementById('webhookStatus').textContent = '設定済み';
+                document.getElementById('webhookStatus').style.color = '#34a853';
+            }
             renderTables();
             syncToSpreadsheet();
         });
@@ -495,8 +492,8 @@
                     html += `<td class="attendance-cell ${cellClass}" onclick="toggle(${si}, ${di})">${cellText}</td>`;
                 });
 
-                const hasWebhook = data.webhookUrls[si];
-                html += `<td><button class="notify-btn" onclick="sendNotify(${si})" ${hasWebhook ? '' : 'disabled'} title="${hasWebhook ? '通知を送信' : 'Webhook未設定'}">${hasWebhook ? '通知' : '-'}</button><button class="edit-btn" onclick="editStudent(${si})" title="設定を編集">編集</button></td>`;
+                const hasWebhook = data.globalWebhookUrl;
+                html += `<td><button class="notify-btn" onclick="sendNotify(${si})" ${hasWebhook ? '' : 'disabled'} title="${hasWebhook ? '通知を送信' : 'Webhook未設定'}">${hasWebhook ? '通知' : '-'}</button></td>`;
                 html += '</tr>';
             });
 
@@ -506,45 +503,39 @@
 
         function addStudent() {
             const nameInput = document.getElementById('studentName');
-            const webhookInput = document.getElementById('webhookUrl');
             const name = nameInput.value.trim();
-            const webhookUrl = webhookInput.value.trim();
             if (!name) return;
 
-            const studentIndex = data.students.length;
             data.students.push(name);
-
-            if (webhookUrl) {
-                data.webhookUrls[studentIndex] = webhookUrl;
-                db.ref('attendance').update({
-                    students: data.students,
-                    webhookUrls: data.webhookUrls
-                });
-            } else {
-                db.ref('attendance/students').set(data.students);
-            }
+            db.ref('attendance/students').set(data.students);
 
             nameInput.value = '';
-            webhookInput.value = '';
             showToast(name + ' を追加');
+        }
+
+        function saveWebhook() {
+            const url = document.getElementById('globalWebhookUrl').value.trim();
+            db.ref('attendance/globalWebhookUrl').set(url);
+            if (url) {
+                document.getElementById('webhookStatus').textContent = '保存しました';
+                document.getElementById('webhookStatus').style.color = '#34a853';
+            } else {
+                document.getElementById('webhookStatus').textContent = '削除しました';
+                document.getElementById('webhookStatus').style.color = '#ea4335';
+            }
+            showToast('Webhook URLを保存しました');
         }
 
         function sendNotify(studentIndex) {
             const studentName = data.students[studentIndex];
-            const webhookUrl = data.webhookUrls[studentIndex];
-            const discordUserId = data.discordUserIds[studentIndex];
+            const webhookUrl = data.globalWebhookUrl;
 
             if (!webhookUrl) {
                 showToast('Webhook URLが設定されていません');
                 return;
             }
 
-            let message = `【出席確認】\n${studentName}さん、本日の授業に出席されていません。ご確認ください。`;
-
-            // メンションを追加
-            if (discordUserId) {
-                message += `\n<@${discordUserId}>`;
-            }
+            const message = `【出席確認】\n${studentName}さん、本日の授業に出席されていません。ご確認ください。`;
 
             fetch(DISCORD_NOTIFY_URL, {
                 method: 'POST',
@@ -560,36 +551,6 @@
                 console.log('Notify error:', err);
                 showToast('通知の送信に失敗しました');
             });
-        }
-
-        function editStudent(studentIndex) {
-            const studentName = data.students[studentIndex];
-            const currentWebhook = data.webhookUrls[studentIndex] || '';
-            const currentUserId = data.discordUserIds[studentIndex] || '';
-
-            const newWebhook = prompt(`${studentName}のWebhook URL:`, currentWebhook);
-            if (newWebhook === null) return; // キャンセル
-
-            const newUserId = prompt(`${studentName}のDiscordユーザーID（メンション用、数字のみ）:`, currentUserId);
-            if (newUserId === null) return; // キャンセル
-
-            if (newWebhook) {
-                data.webhookUrls[studentIndex] = newWebhook;
-            } else {
-                delete data.webhookUrls[studentIndex];
-            }
-
-            if (newUserId) {
-                data.discordUserIds[studentIndex] = newUserId;
-            } else {
-                delete data.discordUserIds[studentIndex];
-            }
-
-            db.ref('attendance').update({
-                webhookUrls: data.webhookUrls,
-                discordUserIds: data.discordUserIds
-            });
-            showToast(studentName + ' の設定を更新しました');
         }
 
         function addDate() {
@@ -619,12 +580,10 @@
                 }
             });
 
-            db.ref('attendance').set({
+            db.ref('attendance').update({
                 students: data.students,
                 dates: data.dates,
-                attendance: newAttendance,
-                webhookUrls: data.webhookUrls,
-                discordUserIds: data.discordUserIds
+                attendance: newAttendance
             });
             showToast('日付を削除しました');
         }
@@ -701,34 +660,10 @@
                 }
             });
 
-            // webhookUrlsも再構築
-            const newWebhookUrls = {};
-            Object.keys(data.webhookUrls).forEach(key => {
-                const si = Number(key);
-                if (si < index) {
-                    newWebhookUrls[si] = data.webhookUrls[key];
-                } else if (si > index) {
-                    newWebhookUrls[si - 1] = data.webhookUrls[key];
-                }
-            });
-
-            // discordUserIdsも再構築
-            const newDiscordUserIds = {};
-            Object.keys(data.discordUserIds || {}).forEach(key => {
-                const si = Number(key);
-                if (si < index) {
-                    newDiscordUserIds[si] = data.discordUserIds[key];
-                } else if (si > index) {
-                    newDiscordUserIds[si - 1] = data.discordUserIds[key];
-                }
-            });
-
-            db.ref('attendance').set({
+            db.ref('attendance').update({
                 students: data.students,
                 dates: data.dates,
-                attendance: newAttendance,
-                webhookUrls: newWebhookUrls,
-                discordUserIds: newDiscordUserIds
+                attendance: newAttendance
             });
             showToast('削除しました');
         }
