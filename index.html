@@ -361,7 +361,6 @@
         let data = { students: [], dates: [], attendance: {}, globalWebhookUrl: '', discordUserIds: {} };
         let selectedMonth = null;
         let triangleTimers = {}; // △の10秒タイマー
-        let notifyTimers = {}; // 5分後通知タイマー
         let notifiedKeys = {}; // 通知済みのキー（重複防止）
 
         // スプレッドシートに同期
@@ -626,41 +625,25 @@
                 clearTimeout(triangleTimers[key]);
                 delete triangleTimers[key];
             }
-            if (notifyTimers[key]) {
-                clearTimeout(notifyTimers[key]);
-                delete notifyTimers[key];
-                showToast('通知予約をキャンセルしました');
-            }
-
             // 状態が変わったら通知済みフラグをリセット
             delete notifiedKeys[key];
 
-            // △になったら10秒後に5分タイマーを設定
+            // △になったら10秒後に即通知
             if (next === 'warning') {
                 triangleTimers[key] = setTimeout(() => {
-                    // 10秒経過後、まだ△のままか確認
                     if (data.attendance[key] !== 'warning') {
                         delete triangleTimers[key];
                         return;
                     }
-                    // 既に通知済みなら何もしない
                     if (notifiedKeys[key]) {
                         delete triangleTimers[key];
                         return;
                     }
 
                     delete triangleTimers[key];
-                    const studentName = data.students[studentIndex];
-                    showToast(studentName + ' に5分後に通知します');
-
-                    notifyTimers[key] = setTimeout(() => {
-                        // 通知前に再度確認
-                        if (data.attendance[key] === 'warning' && !notifiedKeys[key]) {
-                            sendNotify(studentIndex);
-                            notifiedKeys[key] = true; // 通知済みフラグを立てる
-                        }
-                        delete notifyTimers[key];
-                    }, 5 * 60 * 1000); // 5分
+                    sendNotify(studentIndex);
+                    notifiedKeys[key] = true;
+                    showToast(data.students[studentIndex] + ' に通知を送信しました');
                 }, 10 * 1000); // 10秒
             }
 
